@@ -1,0 +1,30 @@
+{
+  "name": "file-converter-backend",
+  "version": "1.0.0",
+  "description": "File conversion API — images, video, audio, documents",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "docx": "^8.5.0",
+    "express": "^4.18.2",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "jimp": "^0.22.12",
+    "jszip": "^3.10.1",
+    "libreoffice-convert": "^1.5.1",
+    "mammoth": "^1.7.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.14.0",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.33.0",
+    "xlsx": "0.18.5"
+  }
+}
