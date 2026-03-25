@@ -472,14 +472,20 @@ async function pdfToDocx(data) {
 
   // ── Attempt 2: LibreOffice (preserves text/tables/layout) ───────────────────
   try {
-    return await libreOfficeConvert(data, 'pdf', 'docx');
+    const loBuf = await libreOfficeConvert(data, 'pdf', 'docx');
+    if (loBuf && loBuf.length > 500) return loBuf;
+    throw new Error('LibreOffice returned empty output');
   } catch (libreErr) {
     console.warn('[pdfToDocx] LibreOffice failed:', libreErr.message);
   }
 
   // ── Attempt 3: Plain-text fallback ──────────────────────────────────────────
-  const parsed = await parsePdf(data);
-  return txtToDocx(Buffer.from(parsed.text, 'utf-8'));
+  try {
+    const parsed = await parsePdf(data);
+    return txtToDocx(Buffer.from(parsed.text, 'utf-8'));
+  } catch (textErr) {
+    throw new Error(`PDF→DOCX failed on all methods. Last error: ${textErr.message}`);
+  }
 }
 
 async function pdfToXlsx(data) {
