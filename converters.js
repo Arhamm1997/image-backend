@@ -405,6 +405,79 @@ async function pdfToTxt(data) {
 }
 
 async function pdfToDocx(data) {
+  // ── Attempt 1: Render each page as a PNG via pdftoppm (Docker) ──────────────
+  try {
+    const { execFile }   = require('child_process');
+    const execFileAsync  = require('util').promisify(execFile);
+    const { Document, Packer, Paragraph, ImageRun, PageOrientation } = require('docx');
+
+    const tmpDir    = path.join(os.tmpdir(), `pdf2docx_${crypto.randomUUID()}`);
+    const inputPath = path.join(tmpDir, 'input.pdf');
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(inputPath, data);
+
+    // Render all pages to PNG at 150 DPI; output: page-01.png, page-02.png …
+    await execFileAsync('pdftoppm', ['-r', '150', '-png', inputPath, path.join(tmpDir, 'page')]);
+
+    const pngs = (await fs.readdir(tmpDir))
+      .filter(f => f.endsWith('.png'))
+      .sort()
+      .map(f => path.join(tmpDir, f));
+
+    if (pngs.length === 0) throw new Error('pdftoppm produced no images');
+
+    // Detect orientation from first page
+    const firstMeta = await sharp(await fs.readFile(pngs[0])).metadata();
+    const landscape = firstMeta.width > firstMeta.height;
+
+    // DOCX page size in twips (1440 twips = 1 inch)
+    const PAGE_W = landscape ? 15840 : 12240; // 11" or 8.5"
+    const PAGE_H = landscape ? 12240 : 15840;
+    // Available pixels at 96 DPI (0 margins)
+    const AVAIL_W = landscape ? 1056 : 816;
+    const AVAIL_H = landscape ? 816  : 1056;
+
+    const sections = [];
+    for (const pngPath of pngs) {
+      const imgBuf = await fs.readFile(pngPath);
+      const meta   = await sharp(imgBuf).metadata();
+      const ar     = meta.width / meta.height;
+      let imgW = AVAIL_W;
+      let imgH = Math.round(imgW / ar);
+      if (imgH > AVAIL_H) { imgH = AVAIL_H; imgW = Math.round(imgH * ar); }
+
+      sections.push({
+        properties: {
+          page: {
+            size: { width: PAGE_W, height: PAGE_H,
+                    orientation: landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
+            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+          },
+        },
+        children: [
+          new Paragraph({
+            children: [new ImageRun({ data: imgBuf, transformation: { width: imgW, height: imgH } })],
+            spacing: { before: 0, after: 0 },
+          }),
+        ],
+      });
+    }
+
+    await fs.rm(tmpDir, { recursive: true }).catch(() => {});
+    return Packer.toBuffer(new Document({ sections }));
+
+  } catch (renderErr) {
+    console.warn('[pdfToDocx] pdftoppm failed:', renderErr.message);
+  }
+
+  // ── Attempt 2: LibreOffice (preserves text/tables/layout) ───────────────────
+  try {
+    return await libreOfficeConvert(data, 'pdf', 'docx');
+  } catch (libreErr) {
+    console.warn('[pdfToDocx] LibreOffice failed:', libreErr.message);
+  }
+
+  // ── Attempt 3: Plain-text fallback ──────────────────────────────────────────
   const parsed = await parsePdf(data);
   return txtToDocx(Buffer.from(parsed.text, 'utf-8'));
 }
