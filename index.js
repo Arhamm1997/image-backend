@@ -31,12 +31,7 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean).map(o => o.replace(/\/+$/, ''));
 
 app.use(cors({
-  origin(origin, cb) {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) return cb(null, true);
-    if (ALLOWED_ORIGINS.some(o => origin.startsWith(o))) return cb(null, true);
-    cb(new Error(`CORS: origin "${origin}" is not allowed.`));
-  },
+  origin: ALLOWED_ORIGINS,
   exposedHeaders: ['Content-Disposition'],
 }));
 
