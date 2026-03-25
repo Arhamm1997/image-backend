@@ -403,23 +403,8 @@ async function pdfToTxt(data) {
 }
 
 async function pdfToDocx(data) {
-  // Use LibreOffice for high-fidelity PDF→DOCX conversion
-  // (preserves formatting, fonts, layout, tables)
-  try {
-    return await libreConvertAsync({
-      source: data,
-      bin: 'soffice',
-      ext: 'pdf',
-      format: 'docx',
-    });
-  } catch (err) {
-    throw new Error(
-      `PDF→DOCX conversion failed. ` +
-      `LibreOffice may not be installed. ` +
-      `Ensure deployment uses Docker with LibreOffice: see Dockerfile. ` +
-      `Details: ${err.message}`,
-    );
-  }
+  const parsed = await parsePdf(data);
+  return txtToDocx(Buffer.from(parsed.text, 'utf-8'));
 }
 
 async function pdfToXlsx(data) {
