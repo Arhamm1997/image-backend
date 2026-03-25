@@ -93,4 +93,19 @@ const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`File Converter API running on http://localhost:${PORT}`);
   console.log(`Allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
+
+  // Keep-alive: ping own /health every 14 min so Render free tier never idles
+  // (Render spins down after 15 min of no inbound traffic)
+  const selfUrl = process.env.RENDER_EXTERNAL_URL
+    ? `${process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '')}/health`
+    : `http://localhost:${PORT}/health`;
+
+  const https = require('https');
+  const http  = require('http');
+  const ping  = selfUrl.startsWith('https') ? https : http;
+
+  setInterval(() => {
+    ping.get(selfUrl, (res) => { res.resume(); })
+        .on('error', () => {});
+  }, 14 * 60 * 1000);
 });
