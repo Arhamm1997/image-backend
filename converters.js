@@ -227,7 +227,9 @@ async function convertDocument(data, srcExt, targetFormat) {
     if (tgt === 'html') return docxToHtml(data);
     if (tgt === 'pdf')  return docxToPdf(data);
     if (tgt === 'xlsx') return docxToXlsx(data);
+    if (tgt === 'xls')  return docxToXlsx(data);
     if (tgt === 'csv')  return docxToXlsx(data).then(xlsxToCsv);
+    if (tgt === 'rtf')  return docxToTxt(data).then(buf => txtToRtf(buf));
   }
 
   // ── PDF ───────────────────────────────────────────────────────────────────
