@@ -26,9 +26,9 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
   'http://127.0.0.1:5173',
-  'https://image-frontend-black.vercel.app/',
+  'https://image-frontend-black.vercel.app',
   process.env.FRONTEND_URL,
-].filter(Boolean);
+].filter(Boolean).map(o => o.replace(/\/+$/, ''));
 
 app.use(cors({
   origin(origin, cb) {
