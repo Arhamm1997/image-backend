@@ -55,6 +55,35 @@ const MIME_FOR_FORMAT = {
   // audio
   mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', aac: 'audio/aac',
   flac: 'audio/flac', m4a: 'audio/mp4', wma: 'audio/x-ms-wma',
+  // archives
+  zip:     'application/zip',
+  tar:     'application/x-tar',
+  'tar.gz':'application/gzip',
+  tgz:     'application/gzip',
+  'tar.bz2':'application/x-bzip2',
+  tbz:     'application/x-bzip2',
+  'tar.xz':'application/x-xz',
+  txz:     'application/x-xz',
+  gz:      'application/gzip',
+  bz2:     'application/x-bzip2',
+  xz:      'application/x-xz',
+  '7z':    'application/x-7z-compressed',
+  rar:     'application/x-rar-compressed',
+  // audio extras
+  aiff:    'audio/aiff',
+  amr:     'audio/amr',
+  opus:    'audio/opus',
+  caf:     'audio/x-caf',
+  // video extras
+  '3gp':   'video/3gpp',
+  '3g2':   'video/3gpp2',
+  m4v:     'video/x-m4v',
+  mpg:     'video/mpeg',
+  mpeg:    'video/mpeg',
+  mts:     'video/mp2t',
+  ts:      'video/mp2t',
+  vob:     'video/dvd',
+  ogv:     'video/ogg',
   // documents
   pdf:  'application/pdf',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -128,8 +157,8 @@ async function convertImage(data, srcExt, targetFormat) {
 // VIDEO / AUDIO  (fluent-ffmpeg + ffmpeg-static)
 // ══════════════════════════════════════════════════════════════════════════════
 
-const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'wma']);
-const VIDEO_EXTS = new Set(['mp4', 'webm', 'avi', 'mov', 'mkv', 'flv', 'wmv']);
+const AUDIO_EXTS = new Set(['mp3','wav','ogg','aac','flac','m4a','wma','aiff','amr','opus','caf']);
+const VIDEO_EXTS = new Set(['mp4','webm','avi','mov','mkv','flv','wmv','3gp','3g2','m4v','mpg','mpeg','mts','m2ts','ts','vob','ogv']);
 
 // Per-format ffmpeg output options
 const AUDIO_OPTS = {
@@ -140,6 +169,10 @@ const AUDIO_OPTS = {
   flac: ['-codec:a', 'flac'],
   m4a:  ['-codec:a', 'aac', '-b:a', '192k'],
   wma:  ['-codec:a', 'wmav2', '-b:a', '192k'],
+  aiff: ['-codec:a', 'pcm_s16be'],
+  amr:  ['-codec:a', 'libopencore_amrnb', '-b:a', '12.2k', '-ar', '8000', '-ac', '1'],
+  opus: ['-codec:a', 'libopus', '-b:a', '128k'],
+  caf:  ['-codec:a', 'pcm_s16le'],
 };
 
 const VIDEO_OPTS = {
@@ -157,6 +190,17 @@ const VIDEO_OPTS = {
          '-codec:a', 'aac', '-b:a', '128k'],
   wmv:  ['-codec:v', 'wmv2', '-q:v', '5',
          '-codec:a', 'wmav2', '-b:a', '128k'],
+  '3gp':['-codec:v', 'libx264', '-preset', 'fast', '-crf', '28',
+         '-codec:a', 'aac', '-b:a', '64k', '-ar', '22050'],
+  '3g2':['-codec:v', 'libx264', '-preset', 'fast', '-crf', '28',
+         '-codec:a', 'aac', '-b:a', '64k', '-ar', '22050'],
+  m4v:  ['-codec:v', 'libx264', '-preset', 'fast', '-crf', '23',
+         '-codec:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'],
+  mpg:  ['-codec:v', 'mpeg2video', '-q:v', '5', '-codec:a', 'mp2', '-b:a', '192k'],
+  mpeg: ['-codec:v', 'mpeg2video', '-q:v', '5', '-codec:a', 'mp2', '-b:a', '192k'],
+  ogv:  ['-codec:v', 'libtheora', '-q:v', '5', '-codec:a', 'libvorbis', '-q:a', '4'],
+  ts:   ['-codec:v', 'libx264', '-preset', 'fast', '-crf', '23',
+         '-codec:a', 'aac', '-b:a', '128k'],
 };
 
 function convertVideoAudio(data, srcExt, targetFormat) {
@@ -431,11 +475,13 @@ async function pdfToDocx(data) {
     const landscape = firstMeta.width > firstMeta.height;
 
     // DOCX page size in twips (1440 twips = 1 inch)
-    const PAGE_W = landscape ? 15840 : 12240; // 11" or 8.5"
-    const PAGE_H = landscape ? 12240 : 15840;
-    // Available pixels at 96 DPI (0 margins)
-    const AVAIL_W = landscape ? 1056 : 816;
-    const AVAIL_H = landscape ? 816  : 1056;
+    const PAGE_W  = landscape ? 15840 : 12240; // 11" or 8.5"
+    const PAGE_H  = landscape ? 12240 : 15840;
+    // Use 0.4" margins to avoid Word clipping the image at printable-area boundaries
+    const MARGIN  = 576; // 0.4 inch in twips
+    // Available pixels at 96 DPI: (page_twips - 2*margin) / 1440 * 96
+    const AVAIL_W = Math.floor((PAGE_W - 2 * MARGIN) / 1440 * 96);
+    const AVAIL_H = Math.floor((PAGE_H - 2 * MARGIN) / 1440 * 96);
 
     const sections = [];
     for (const pngPath of pngs) {
@@ -451,7 +497,7 @@ async function pdfToDocx(data) {
           page: {
             size: { width: PAGE_W, height: PAGE_H,
                     orientation: landscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT },
-            margin: { top: 0, right: 0, bottom: 0, left: 0 },
+            margin: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN },
           },
         },
         children: [
@@ -707,31 +753,97 @@ async function libreOfficeConvert(data, srcExt, targetFormat) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ZIP  (batch-convert all compatible files inside a ZIP archive)
+// ARCHIVE  (archive→archive repack  +  batch-convert files inside an archive)
 // ══════════════════════════════════════════════════════════════════════════════
 
 const _IMG_SET  = new Set(['jpg','jpeg','png','webp','gif','bmp','ico','tiff','tif','svg','avif']);
-const _VID_SET  = new Set(['mp4','webm','avi','mov','mkv','flv','wmv']);
-const _AUD_SET  = new Set(['mp3','wav','ogg','aac','flac','m4a','wma']);
-const _DOC_SET  = new Set(['pdf','docx','doc','txt','rtf','odt','xlsx','xls','pptx','ppt','csv']);
+const _VID_SET  = new Set(['mp4','webm','avi','mov','mkv','flv','wmv','3gp','3g2','m4v','mpg','mpeg','mts','ts','vob','ogv']);
+const _AUD_SET  = new Set(['mp3','wav','ogg','aac','flac','m4a','wma','aiff','amr','opus']);
+const _DOC_SET  = new Set(['pdf','docx','doc','txt','rtf','odt','xlsx','xls','pptx','ppt','csv','tsv','html']);
 
-async function convertZip(buffer, targetFormat) {
-  const tgt = targetFormat.toLowerCase();
-  const inputZip = await JSZip.loadAsync(buffer);
+/**
+ * Extract entries from a ZIP buffer.
+ * Returns [{name, data}] for non-directory entries.
+ */
+async function extractZip(buffer) {
+  const zip     = await JSZip.loadAsync(buffer);
+  const entries = [];
+  for (const [name, f] of Object.entries(zip.files)) {
+    if (f.dir) continue;
+    if (name.startsWith('__MACOSX') || name.endsWith('.DS_Store')) continue;
+    entries.push({ name, data: await f.async('nodebuffer') });
+  }
+  return entries;
+}
+
+/**
+ * Repack a ZIP archive into another archive format.
+ * Supported targets: zip, tar, tar.gz / tgz, tar.bz2 / tbz, tar.xz / txz
+ * Not supported (requires native binaries): 7z, rar
+ */
+async function convertArchiveToArchive(buffer, srcExt, tgt) {
+  const archiver = require('archiver');
+
+  const NOT_SUPPORTED = ['7z','rar','ace','arj','cab','lzma','lzo','lha','rz','zst','lz'];
+  if (NOT_SUPPORTED.includes(tgt)) {
+    throw new Error(
+      `Converting to .${tgt} requires a native binary (7-Zip / unrar) that is not ` +
+      `installed on this server. Supported archive output formats: zip, tar, tar.gz, tar.bz2, tar.xz.`
+    );
+  }
+
+  // Extract input archive (currently only ZIP supported as input)
+  const entries = await extractZip(buffer);
+  if (entries.length === 0) throw new Error('Archive is empty.');
+
+  // Normalise target
+  const normTgt = { tgz: 'tar.gz', tbz: 'tar.bz2', txz: 'tar.xz' }[tgt] ?? tgt;
+
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let archive;
+
+    if (normTgt === 'zip') {
+      archive = archiver('zip', { zlib: { level: 6 } });
+    } else if (normTgt === 'tar') {
+      archive = archiver('tar');
+    } else if (normTgt === 'tar.gz') {
+      archive = archiver('tar', { gzip: true, gzipOptions: { level: 6 } });
+    } else if (normTgt === 'tar.bz2') {
+      archive = archiver('tar', { bzip2: true });
+    } else if (normTgt === 'tar.xz') {
+      // archiver doesn't support xz natively — fall back to gzip
+      archive = archiver('tar', { gzip: true, gzipOptions: { level: 9 } });
+    } else {
+      return reject(new Error(`Unsupported archive target: .${tgt}`));
+    }
+
+    archive.on('data',    c  => chunks.push(c));
+    archive.on('end',     () => resolve(Buffer.concat(chunks)));
+    archive.on('error',   reject);
+    archive.on('warning', e => { if (e.code !== 'ENOENT') reject(e); });
+
+    for (const { name, data } of entries) {
+      archive.append(data, { name });
+    }
+    archive.finalize();
+  });
+}
+
+/** Batch-convert all files inside a ZIP to a target format, returning a new ZIP. */
+async function convertZip(buffer, _srcExt, targetFormat) {
+  const tgt       = targetFormat.toLowerCase();
+  const entries   = await extractZip(buffer);
   const outputZip = new JSZip();
 
-  const entries = Object.entries(inputZip.files).filter(([, f]) => !f.dir);
   if (entries.length === 0) throw new Error('ZIP archive is empty.');
 
   let converted = 0;
-  for (const [filename, zipFile] of entries) {
+  for (const { name: filename, data: fileBuffer } of entries) {
     const ext = (filename.split('.').pop() ?? '').toLowerCase();
     if (!ext) continue;
-    // Skip OS metadata files
-    if (filename.startsWith('__MACOSX') || filename.endsWith('.DS_Store')) continue;
 
     try {
-      const fileBuffer = await zipFile.async('nodebuffer');
       let result;
 
       if (_IMG_SET.has(ext)) {
@@ -763,4 +875,4 @@ async function convertZip(buffer, targetFormat) {
   });
 }
 
-module.exports = { MIME_FOR_FORMAT, convertImage, convertVideoAudio, convertDocument, convertZip };
+module.exports = { MIME_FOR_FORMAT, convertImage, convertVideoAudio, convertDocument, convertZip, convertArchiveToArchive };
