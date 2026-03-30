@@ -145,10 +145,10 @@ async function convertImage(data, srcExt, targetFormat) {
   }
 
   const opts = {};
-  if (sharpFmt === 'jpeg') { opts.quality = 82; opts.mozjpeg = true; }
-  if (sharpFmt === 'webp') { opts.quality = 80; opts.effort = 4; opts.smartSubsample = true; }
-  if (sharpFmt === 'avif') { opts.quality = 60; opts.effort = 4; }
-  if (sharpFmt === 'png')  { opts.compressionLevel = 9; opts.adaptiveFiltering = true; }
+  if (sharpFmt === 'jpeg') { opts.quality = 82; }                           // mozjpeg removed — 3-5x faster
+  if (sharpFmt === 'webp') { opts.quality = 80; opts.effort = 2; opts.smartSubsample = true; }  // effort 4→2
+  if (sharpFmt === 'avif') { opts.quality = 60; opts.effort = 2; }          // effort 4→2
+  if (sharpFmt === 'png')  { opts.compressionLevel = 6; }
 
   return pipeline.toFormat(sharpFmt, opts).toBuffer();
 }
@@ -178,7 +178,7 @@ const AUDIO_OPTS = {
 const VIDEO_OPTS = {
   mp4:  ['-codec:v', 'libx264', '-preset', 'fast', '-crf', '23',
          '-codec:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'],
-  webm: ['-codec:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0',
+  webm: ['-codec:v', 'libvpx-vp9', '-crf', '30', '-b:v', '0', '-cpu-used', '4',
          '-codec:a', 'libopus', '-b:a', '128k'],
   avi:  ['-codec:v', 'mpeg4', '-q:v', '5',
          '-codec:a', 'libmp3lame', '-q:a', '4'],
@@ -800,6 +800,7 @@ async function convertArchiveToArchive(buffer, srcExt, tgt) {
   const normTgt = { tgz: 'tar.gz', tbz: 'tar.bz2', txz: 'tar.xz' }[tgt] ?? tgt;
 
   return new Promise((resolve, reject) => {
+    const { PassThrough } = require('stream');
     const chunks = [];
     let archive;
 
@@ -818,8 +819,12 @@ async function convertArchiveToArchive(buffer, srcExt, tgt) {
       return reject(new Error(`Unsupported archive target: .${tgt}`));
     }
 
-    archive.on('data',    c  => chunks.push(c));
-    archive.on('end',     () => resolve(Buffer.concat(chunks)));
+    const pass = new PassThrough();
+    pass.on('data',  c  => chunks.push(c));
+    pass.on('end',   () => resolve(Buffer.concat(chunks)));
+    pass.on('error', reject);
+
+    archive.pipe(pass);
     archive.on('error',   reject);
     archive.on('warning', e => { if (e.code !== 'ENOENT') reject(e); });
 

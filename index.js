@@ -43,7 +43,7 @@ app.use(cors({
     // Allow requests with no origin (curl, Postman, server-to-server)
     if (!origin) return cb(null, true);
     if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
+    cb(null, false);
   },
   exposedHeaders: ['Content-Disposition'],
 }));
@@ -139,16 +139,28 @@ app.listen(PORT, () => {
   console.log(`File Converter API running on http://localhost:${PORT}`);
   console.log(`Allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
 
-  // Keep-alive: ping own /health every 14 min so Render free tier never idles
+  // Keep-alive: ping own /health every 10 min so Render free tier never idles.
+  // IMPORTANT: Set RENDER_EXTERNAL_URL in Render environment variables,
+  // otherwise localhost pings don't reach Render's load balancer and the
+  // service still spins down after 15 minutes.
   const selfUrl = process.env.RENDER_EXTERNAL_URL
     ? `${process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, '')}/health`
-    : `http://localhost:${PORT}/health`;
+    : null;
 
-  const https = require('https');
-  const http  = require('http');
-  const ping  = selfUrl.startsWith('https') ? https : http;
+  if (selfUrl) {
+    const https = require('https');
+    const http  = require('http');
+    const ping  = selfUrl.startsWith('https') ? https : http;
 
-  setInterval(() => {
-    ping.get(selfUrl, (r) => { r.resume(); }).on('error', () => {});
-  }, 14 * 60 * 1000);
+    const doPing = () => {
+      ping.get(selfUrl, (r) => { r.resume(); }).on('error', (err) => {
+        console.error(`[keep-alive] ping failed: ${err.message}`);
+      });
+    };
+
+    setInterval(doPing, 10 * 60 * 1000);
+    console.log(`[keep-alive] Pinging ${selfUrl} every 10 minutes`);
+  } else {
+    console.warn('[keep-alive] RENDER_EXTERNAL_URL not set — self-ping disabled. Add it in Render environment variables to prevent idle shutdown.');
+  }
 });
