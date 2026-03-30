@@ -48,10 +48,12 @@ app.use(cors({
   exposedHeaders: ['Content-Disposition'],
 }));
 
-// ─── File upload (stored in memory, max 500 MB) ───────────────────────────────
+// ─── File upload (stored in memory, max 100 MB on free tier) ───────────────────
+// Note: Render free tier has 512MB total RAM. With Node.js + deps + processing,
+// max uploadable file is ~100MB. Paid plans can handle more.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 500 * 1024 * 1024 },
+  limits:  { fileSize: 100 * 1024 * 1024 },
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -78,6 +80,16 @@ function stripExt(filename, ext) {
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// ─── Error handler for file upload size exceeded ────────────────────────────
+app.use((err, req, res, next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      detail: 'File too large. Maximum size is 100 MB. For larger files, use a paid Render plan.',
+    });
+  }
+  next(err);
+});
 
 app.post('/api/convert', upload.single('file'), async (req, res) => {
   // ── Validate inputs ──────────────────────────────────────────────────────
